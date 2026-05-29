@@ -1,0 +1,29 @@
+{
+  "name": "AI日语学习",
+  "appid": "__UNI__AI_JAPANESE_LEARNING",
+  "description": "AI 日语学习微信小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "app-plus": {
+    "usingComponents": true
+  },
+  "mp-weixin": {
+    "appid": "请替换为你自己的微信小程序AppID",
+    "mergeVirtualHostAttributes": true,
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "enhance": true,
+      "minified": true,
+      "postcss": true
+    },
+    "optimization": {
+      "subPackages": true
+    },
+    "usingComponents": true
+  },
+  "h5": {
+    "title": "AI日语学习"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "types": [
+      "@dcloudio/types",
+      "uview-plus/types"
+    ]
+  },
+  "include": [
+    "./**/*.js",
+    "./**/*.vue",
+    "./**/*.json"
+  ]
+}
+

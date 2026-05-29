@@ -1,0 +1,39 @@
+@import "uview-plus/theme.scss";
+
+$uni-color-primary: #6ea8ff;
+$uni-color-success: #63c4a5;
+$uni-color-warning: #f7b267;
+$uni-color-error: #ff7f7f;
+$uni-text-color: #1f3551;
+$uni-text-color-grey: #6d829d;
+$uni-bg-color: #f4f9ff;
+$uni-border-color: #d8e8ff;
+
+:root,
+page {
+  --brand-primary: #6ea8ff;
+  --brand-primary-deep: #4c89ec;
+  --brand-secondary: #9ad8ff;
+  --brand-accent: #8ce0c1;
+  --page-bg: linear-gradient(180deg, #f8fbff 0%, #edf6ff 100%);
+  --card-bg: rgba(255, 255, 255, 0.92);
+  --card-border: rgba(127, 182, 255, 0.28);
+  --text-primary: #1f3551;
+  --text-secondary: #68809f;
+  --shadow-soft: 0 16rpx 48rpx rgba(92, 140, 214, 0.12);
+}
+
+.dark-theme {
+  --page-bg: linear-gradient(180deg, #162233 0%, #0e1724 100%);
+  --card-bg: rgba(28, 43, 66, 0.92);
+  --card-border: rgba(121, 176, 255, 0.18);
+  --text-primary: #eff6ff;
+  --text-secondary: #b0c3de;
+  --shadow-soft: 0 16rpx 48rpx rgba(0, 0, 0, 0.24);
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
