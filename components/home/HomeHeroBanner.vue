@@ -101,7 +101,6 @@ defineProps({
   &__content {
     position: relative;
     z-index: 1;
-    margin-top: 96rpx;
     max-width: 420rpx;
     display: flex;
     flex-direction: column;

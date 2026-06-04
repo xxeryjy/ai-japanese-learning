@@ -10,12 +10,12 @@ defineProps({
 <template>
   <view class="entry-grid">
     <view
-      v-for="item in items"
-      :key="item.title"
+      v-for="(item, index) in items"
+      :key="index"
       class="entry-grid__item"
+      :class="`entry-grid__item${index + 1}`"
     >
       <image class="entry-grid__image" :src="item.image" mode="aspectFill" />
-      <view class="entry-grid__mask"></view>
       <view class="entry-grid__content">
         <text class="entry-grid__title">{{ item.title }}</text>
         <text class="entry-grid__subtitle">{{ item.subtitle }}</text>
@@ -37,31 +37,36 @@ defineProps({
     overflow: hidden;
     box-shadow: 0 14rpx 34rpx rgba(210, 196, 207, 0.18);
     background: #fff8fb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
   }
-
-  &__image,
-  &__mask {
-    position: absolute;
-    inset: 0;
+  &__item1 {
+    background: #FEEFEF;
+  }
+  &__item2 {
+    background: #E5F5FC;
+  }
+  &__item3 {
+    background: #F3EBFC;
+  }
+  &__item4 {
+    background: #FEF5DF;
   }
 
   &__image {
-    width: 100%;
-    height: 100%;
-  }
-
-  &__mask {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.16) 100%);
+    width: 100rpx;
+    height: 100rpx;
   }
 
   &__content {
     position: relative;
     z-index: 1;
-    height: 100%;
     padding: 18rpx 10rpx 14rpx;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    justify-content: center;
     text-align: center;
   }
 
@@ -74,15 +79,10 @@ defineProps({
 
   &__subtitle {
     margin-top: 10rpx;
-    font-size: 20rpx;
+    font-size: 16rpx;
     line-height: 1.4;
     color: rgba(99, 71, 52, 0.88);
   }
 }
 
-@media screen and (max-width: 420px) {
-  .entry-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 </style>
