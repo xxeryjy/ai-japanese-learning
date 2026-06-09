@@ -8,7 +8,7 @@ defineProps({
 </script>
 
 <template>
-  <view class="entry-grid">
+  <view class="entry-grid"> 
     <view
       v-for="(item, index) in items"
       :key="index"
