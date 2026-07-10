@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   items: {
     type: Array,
     default: () => []
@@ -9,6 +9,15 @@ defineProps({
     default: 0
   }
 })
+
+function handleClick(item, index) {
+  if (index === props.activeIndex) return
+  if (!item.path) return
+
+  uni.navigateTo({
+    url: item.path
+  })
+}
 </script>
 
 <template>
@@ -17,6 +26,7 @@ defineProps({
       v-for="(item, index) in items"
       :key="item.label"
       :class="['home-tabbar__item', index === activeIndex ? 'is-active' : '']"
+      @click="handleClick(item, index)"
     >
       <up-icon :name="item.icon" :color="index === activeIndex ? '#ff8d90' : '#9b9ba3'" size="28"></up-icon>
       <text class="home-tabbar__label">{{ item.label }}</text>
@@ -31,7 +41,7 @@ defineProps({
   right: 0;
   bottom: 0;
   z-index: 20;
-  height: calc(120rpx + env(safe-area-inset-bottom));
+  height: calc(40rpx + env(safe-area-inset-bottom));
   padding: 14rpx 28rpx calc(14rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(20rpx);

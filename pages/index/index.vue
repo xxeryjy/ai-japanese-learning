@@ -82,7 +82,7 @@ const favorites = [
 const tabItems = [
   { label: '首页', icon: 'home' },
   { label: '学习', icon: 'bookmark' },
-  { label: 'AI', icon: 'chat' },
+  { label: 'AI', icon: 'chat', path: '/pages/ai/index' },
   { label: '我的', icon: 'account' }
 ]
 

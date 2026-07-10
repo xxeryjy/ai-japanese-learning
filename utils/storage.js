@@ -3,7 +3,8 @@ export const STORAGE_KEYS = {
   USER_PROFILE: 'ai_japanese_learning_user_profile',
   FAVORITES: 'ai_japanese_learning_favorites',
   SETTINGS: 'ai_japanese_learning_settings',
-  ASSISTANT_HISTORY: 'ai_japanese_learning_assistant_history'
+  ASSISTANT_HISTORY: 'ai_japanese_learning_assistant_history',
+  ASSISTANT_SESSION_ID: 'ai_japanese_learning_assistant_session_id'
 }
 
 export function setStorage(key, value) {
@@ -18,4 +19,3 @@ export function getStorage(key, fallback = null) {
 export function removeStorage(key) {
   uni.removeStorageSync(key)
 }
-
