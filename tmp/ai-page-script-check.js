@@ -1,3 +1,4 @@
+
 import { computed, onMounted, ref } from 'vue'
 import { useAssistantStore } from '@/stores/assistant'
 import { ensureLogin } from '@/utils/auth'
@@ -5,6 +6,9 @@ import { ensureLogin } from '@/utils/auth'
 const assistantStore = useAssistantStore()
 
 const statusBarHeight = ref(20)
+const headerHeight = ref(44)
+const headerActionSafeRight = ref(8)
+const isConversationDrawerOpen = ref(false)
 const currentMode = ref('chat')
 const currentScene = ref('meeting')
 const inputText = ref('')
@@ -13,7 +17,7 @@ const modeOptions = [
   {
     value: 'chat',
     label: '对话陪练',
-    desc: '直接开口聊天，AI 会接住中文表达，再帮你慢慢过渡到自然日语。',
+    desc: '直接开口聊天，AI 会接住你的中文表达，再帮你慢慢过渡到自然日语。',
     placeholder: '说中文也可以，我会帮你接成自然日语'
   },
   {
@@ -61,6 +65,8 @@ const decorationImage = '/static/images/home/windbell.png'
 const chatHistory = computed(() => assistantStore.history)
 const result = computed(() => assistantStore.lastResult)
 const isStreaming = computed(() => assistantStore.isStreaming)
+const conversationList = computed(() => assistantStore.conversationList)
+const activeConversationId = computed(() => assistantStore.activeConversationId)
 const isChatMode = computed(() => currentMode.value === 'chat')
 const activeMode = computed(() => modeOptions.find((item) => item.value === currentMode.value) || modeOptions[0])
 const activeScene = computed(() => sceneOptions.find((item) => item.value === currentScene.value) || sceneOptions[0])
@@ -99,6 +105,19 @@ const feedbackBody = computed(() => latestAssistantSuggestion.value)
 function syncStatusBarHeight() {
   const systemInfo = uni.getSystemInfoSync()
   statusBarHeight.value = systemInfo.statusBarHeight || 20
+  const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
+    ? uni.getMenuButtonBoundingClientRect()
+    : null
+
+  if (menuButtonRect && menuButtonRect.width) {
+    const verticalGap = Math.max(menuButtonRect.top - statusBarHeight.value, 0)
+    headerHeight.value = verticalGap * 2 + menuButtonRect.height
+    headerActionSafeRight.value = Math.max(systemInfo.screenWidth - menuButtonRect.left + 12, 8)
+    return
+  }
+
+  headerHeight.value = 44
+  headerActionSafeRight.value = 8
 }
 
 function selectMode(mode) {
@@ -114,7 +133,7 @@ function selectScene(scene) {
 
 function setQuickDraft(type) {
   if (type === 'continue') {
-    inputText.value = `请继续${activeScene.value.label}这个场景，我下一句该怎么说？`
+    inputText.value = `请继续 ${activeScene.value.label} 这个场景，我下一句该怎么说？`
     currentMode.value = 'chat'
     return
   }
@@ -123,7 +142,7 @@ function setQuickDraft(type) {
     const currentIndex = sceneOptions.findIndex((item) => item.value === currentScene.value)
     const nextScene = sceneOptions[(currentIndex + 1) % sceneOptions.length]
     currentScene.value = nextScene.value
-    inputText.value = `我们改成${nextScene.label}场景来练习。`
+    inputText.value = `我们改成 ${nextScene.label} 场景来练习。`
     currentMode.value = 'chat'
     return
   }
@@ -144,6 +163,84 @@ function clearResult() {
   assistantStore.lastResult = null
 }
 
+function showStreamingToast() {
+  uni.showToast({
+    title: '请等待当前回复完成',
+    icon: 'none'
+  })
+}
+
+function openConversationDrawer() {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  isConversationDrawerOpen.value = true
+}
+
+function closeConversationDrawer() {
+  isConversationDrawerOpen.value = false
+}
+
+function createConversation() {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  assistantStore.createConversationAndSwitch()
+  inputText.value = ''
+  currentMode.value = 'chat'
+  closeConversationDrawer()
+}
+
+function switchConversation(conversationId) {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  const switched = assistantStore.switchConversation(conversationId)
+  if (!switched) return
+
+  inputText.value = ''
+  currentMode.value = 'chat'
+  closeConversationDrawer()
+}
+
+function closePage() {
+  closeConversationDrawer()
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
+  }
+
+  uni.reLaunch({
+    url: '/pages/index/index'
+  })
+}
+
+function formatConversationTime(timestamp) {
+  if (!timestamp) {
+    return '--:--'
+  }
+
+  const date = new Date(timestamp)
+  const now = new Date()
+  const isSameDay = date.toDateString() === now.toDateString()
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+
+  if (isSameDay) {
+    return `${hours}:${minutes}`
+  }
+
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${month}/${day}`
+}
+
 async function submit() {
   if (!ensureLogin()) return
   if (isStreaming.value) return
@@ -160,7 +257,9 @@ async function submit() {
   try {
     if (isChatMode.value) {
       inputText.value = ''
-      await assistantStore.sendChat(content)
+      await assistantStore.sendChat(content, {
+        scene: currentScene.value
+      })
       return
     }
 
@@ -173,7 +272,7 @@ async function submit() {
     if (isChatMode.value) {
       inputText.value = content
       uni.showToast({
-        title: '聊天服务连接失败',
+        title: '连接聊天服务失败',
         icon: 'none'
       })
     }

@@ -6,6 +6,9 @@ import { ensureLogin } from '@/utils/auth'
 const assistantStore = useAssistantStore()
 
 const statusBarHeight = ref(20)
+const headerHeight = ref(44)
+const headerActionSafeRight = ref(8)
+const isConversationDrawerOpen = ref(false)
 const currentMode = ref('chat')
 const currentScene = ref('meeting')
 const inputText = ref('')
@@ -14,7 +17,7 @@ const modeOptions = [
   {
     value: 'chat',
     label: '对话陪练',
-    desc: '直接开口聊天，AI 会接住中文表达，再帮你慢慢过渡到自然日语。',
+    desc: '直接开口聊天，AI 会接住你的中文表达，再帮你慢慢过渡到自然日语。',
     placeholder: '说中文也可以，我会帮你接成自然日语'
   },
   {
@@ -62,6 +65,8 @@ const decorationImage = '/static/images/home/windbell.png'
 const chatHistory = computed(() => assistantStore.history)
 const result = computed(() => assistantStore.lastResult)
 const isStreaming = computed(() => assistantStore.isStreaming)
+const conversationList = computed(() => assistantStore.conversationList)
+const activeConversationId = computed(() => assistantStore.activeConversationId)
 const isChatMode = computed(() => currentMode.value === 'chat')
 const activeMode = computed(() => modeOptions.find((item) => item.value === currentMode.value) || modeOptions[0])
 const activeScene = computed(() => sceneOptions.find((item) => item.value === currentScene.value) || sceneOptions[0])
@@ -100,6 +105,19 @@ const feedbackBody = computed(() => latestAssistantSuggestion.value)
 function syncStatusBarHeight() {
   const systemInfo = uni.getSystemInfoSync()
   statusBarHeight.value = systemInfo.statusBarHeight || 20
+  const menuButtonRect = typeof uni.getMenuButtonBoundingClientRect === 'function'
+    ? uni.getMenuButtonBoundingClientRect()
+    : null
+
+  if (menuButtonRect && menuButtonRect.width) {
+    const verticalGap = Math.max(menuButtonRect.top - statusBarHeight.value, 0)
+    headerHeight.value = verticalGap * 2 + menuButtonRect.height
+    headerActionSafeRight.value = Math.max(systemInfo.screenWidth - menuButtonRect.left + 12, 8)
+    return
+  }
+
+  headerHeight.value = 44
+  headerActionSafeRight.value = 8
 }
 
 function selectMode(mode) {
@@ -115,7 +133,7 @@ function selectScene(scene) {
 
 function setQuickDraft(type) {
   if (type === 'continue') {
-    inputText.value = `请继续${activeScene.value.label}这个场景，我下一句该怎么说？`
+    inputText.value = `请继续 ${activeScene.value.label} 这个场景，我下一句该怎么说？`
     currentMode.value = 'chat'
     return
   }
@@ -124,7 +142,7 @@ function setQuickDraft(type) {
     const currentIndex = sceneOptions.findIndex((item) => item.value === currentScene.value)
     const nextScene = sceneOptions[(currentIndex + 1) % sceneOptions.length]
     currentScene.value = nextScene.value
-    inputText.value = `我们改成${nextScene.label}场景来练习。`
+    inputText.value = `我们改成 ${nextScene.label} 场景来练习。`
     currentMode.value = 'chat'
     return
   }
@@ -145,6 +163,84 @@ function clearResult() {
   assistantStore.lastResult = null
 }
 
+function showStreamingToast() {
+  uni.showToast({
+    title: '请等待当前回复完成',
+    icon: 'none'
+  })
+}
+
+function openConversationDrawer() {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  isConversationDrawerOpen.value = true
+}
+
+function closeConversationDrawer() {
+  isConversationDrawerOpen.value = false
+}
+
+function createConversation() {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  assistantStore.createConversationAndSwitch()
+  inputText.value = ''
+  currentMode.value = 'chat'
+  closeConversationDrawer()
+}
+
+function switchConversation(conversationId) {
+  if (isStreaming.value) {
+    showStreamingToast()
+    return
+  }
+
+  const switched = assistantStore.switchConversation(conversationId)
+  if (!switched) return
+
+  inputText.value = ''
+  currentMode.value = 'chat'
+  closeConversationDrawer()
+}
+
+function closePage() {
+  closeConversationDrawer()
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
+  }
+
+  uni.reLaunch({
+    url: '/pages/index/index'
+  })
+}
+
+function formatConversationTime(timestamp) {
+  if (!timestamp) {
+    return '--:--'
+  }
+
+  const date = new Date(timestamp)
+  const now = new Date()
+  const isSameDay = date.toDateString() === now.toDateString()
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+
+  if (isSameDay) {
+    return `${hours}:${minutes}`
+  }
+
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${month}/${day}`
+}
+
 async function submit() {
   if (!ensureLogin()) return
   if (isStreaming.value) return
@@ -161,7 +257,9 @@ async function submit() {
   try {
     if (isChatMode.value) {
       inputText.value = ''
-      await assistantStore.sendChat(content)
+      await assistantStore.sendChat(content, {
+        scene: currentScene.value
+      })
       return
     }
 
@@ -174,7 +272,7 @@ async function submit() {
     if (isChatMode.value) {
       inputText.value = content
       uni.showToast({
-        title: '聊天服务连接失败',
+        title: '连接聊天服务失败',
         icon: 'none'
       })
     }
@@ -199,12 +297,11 @@ onMounted(() => {
   <view class="ai-chat-page" :style="{ paddingTop: `${statusBarHeight}px` }">
     <scroll-view class="ai-chat-page__scroll" scroll-y>
       <view class="ai-chat-page__content">
-        <view class="ai-chat-page__header">
-          <text class="ai-chat-page__header-mark">AI</text>
-          <text class="ai-chat-page__header-title">AI 对话</text>
-          <view class="ai-chat-page__header-actions">
-            <view class="ai-chat-page__header-btn" @click="resetConversation">↻</view>
-            <view class="ai-chat-page__header-btn" @click="clearResult">×</view>
+        <view class="ai-chat-page__header" :style="{ minHeight: `${headerHeight}px`, paddingRight: `${headerActionSafeRight}px` }">
+          <view class="ai-chat-page__header-actions is-left">
+            <view class="ai-chat-page__header-btn" @click="openConversationDrawer">&#9776;</view>
+            <view class="ai-chat-page__header-btn" @click="createConversation">+</view>
+            <view class="ai-chat-page__header-btn" @click="closePage">&times;</view>
           </view>
         </view>
 
@@ -302,16 +399,47 @@ onMounted(() => {
               <view class="ai-chat-page__action-chip is-yellow" @click="setQuickDraft('correct-only')">只做纠错</view>
             </view>
           </view>
+
+          <view v-if="isChatMode" class="ai-chat-page__danger-action">
+            <view class="ai-chat-page__danger-link" @click="resetConversation">清空当前会话</view>
+          </view>
         </view>
       </view>
     </scroll-view>
+
+    <view v-if="isConversationDrawerOpen" class="ai-chat-page__drawer-layer" @click="closeConversationDrawer">
+      <view class="ai-chat-page__drawer" @click.stop :style="{ paddingTop: `${statusBarHeight + headerHeight}px` }">
+        <view class="ai-chat-page__drawer-head">
+          <view>
+            <text class="ai-chat-page__drawer-title">对话列表</text>
+            <text class="ai-chat-page__drawer-subtitle">切换历史会话或开始新对话</text>
+          </view>
+          <view class="ai-chat-page__drawer-create" @click="createConversation">新建</view>
+        </view>
+
+        <scroll-view class="ai-chat-page__drawer-scroll" scroll-y>
+          <view
+            v-for="conversation in conversationList"
+            :key="conversation.id"
+            :class="['ai-chat-page__drawer-item', activeConversationId === conversation.id ? 'is-active' : '']"
+            @click="switchConversation(conversation.id)"
+          >
+            <view class="ai-chat-page__drawer-item-head">
+              <text class="ai-chat-page__drawer-item-title">{{ conversation.title }}</text>
+              <text class="ai-chat-page__drawer-item-time">{{ formatConversationTime(conversation.updatedAt) }}</text>
+            </view>
+            <text class="ai-chat-page__drawer-item-preview">{{ conversation.preview }}</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
 
     <view class="ai-chat-page__composer">
       <image class="ai-chat-page__composer-decoration" :src="decorationImage" mode="aspectFit" />
       <view class="ai-chat-page__composer-tools">
         <view class="ai-chat-page__tool-chip is-pink">语音输入</view>
         <view class="ai-chat-page__tool-chip is-blue">双语显示</view>
-        <view class="ai-chat-page__tool-chip is-yellow">慢速回复</view>
+        <view class="ai-chat-page__tool-chip is-yellow">慢速回答</view>
       </view>
       <view class="ai-chat-page__composer-bar">
         <textarea
@@ -383,25 +511,17 @@ onMounted(() => {
   &__header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 6rpx 8rpx 0;
-  }
-
-  &__header-mark {
-    font-size: 26rpx;
-    font-weight: 700;
-    color: #ff8d90;
-  }
-
-  &__header-title {
-    font-size: 34rpx;
-    font-weight: 700;
-    color: #634633;
   }
 
   &__header-actions {
     display: flex;
-    gap: 14rpx;
+    align-items: center;
+    gap: 18rpx;
+
+    &.is-left {
+      margin-right: auto;
+    }
   }
 
   &__header-btn {
@@ -642,13 +762,15 @@ onMounted(() => {
     font-weight: 700;
   }
 
-  &__result-card {
+  &__result-card,
+  &__feedback-card {
     position: relative;
     z-index: 1;
     padding: 30rpx;
     border-radius: 34rpx;
-    background: linear-gradient(180deg, rgba(255, 248, 241, 0.98) 0%, rgba(255, 251, 247, 0.96) 100%);
-    border: 2rpx solid rgba(245, 228, 214, 0.96);
+    background: rgba(255, 248, 238, 0.94);
+    border: 2rpx solid rgba(244, 228, 211, 0.96);
+    box-shadow: 0 16rpx 38rpx rgba(215, 194, 175, 0.14);
     display: flex;
     flex-direction: column;
     gap: 14rpx;
@@ -661,13 +783,15 @@ onMounted(() => {
     gap: 20rpx;
   }
 
-  &__result-badge {
+  &__result-badge,
+  &__feedback-badge {
+    align-self: flex-start;
     padding: 12rpx 24rpx;
     border-radius: 999rpx;
-    background: #ffe8d8;
-    color: #ca7a4e;
+    background: #ffe9d8;
     font-size: 24rpx;
     font-weight: 700;
+    color: #cb7c50;
   }
 
   &__result-link {
@@ -684,11 +808,17 @@ onMounted(() => {
   }
 
   &__result-sub,
-  &__result-tip {
-    font-size: 24rpx;
+  &__result-tip,
+  &__feedback-text {
+    font-size: 26rpx;
     line-height: 1.7;
     color: #8d705d;
     white-space: pre-line;
+  }
+
+  &__feedback-text {
+    font-weight: 700;
+    color: #644432;
   }
 
   &__message {
@@ -755,43 +885,10 @@ onMounted(() => {
     color: #98745b;
   }
 
-  &__feedback-card {
+  &__action-block,
+  &__danger-action {
     position: relative;
     z-index: 1;
-    padding: 30rpx;
-    border-radius: 34rpx;
-    background: rgba(255, 248, 238, 0.94);
-    border: 2rpx solid rgba(244, 228, 211, 0.96);
-    box-shadow: 0 16rpx 38rpx rgba(215, 194, 175, 0.14);
-    display: flex;
-    flex-direction: column;
-    gap: 14rpx;
-  }
-
-  &__feedback-badge {
-    align-self: flex-start;
-    padding: 12rpx 24rpx;
-    border-radius: 999rpx;
-    background: #ffe9d8;
-    font-size: 24rpx;
-    font-weight: 700;
-    color: #cb7c50;
-  }
-
-  &__feedback-text {
-    font-size: 28rpx;
-    line-height: 1.7;
-    font-weight: 700;
-    color: #644432;
-    white-space: pre-line;
-  }
-
-  &__action-block {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 18rpx;
   }
 
   &__action-title {
@@ -801,6 +898,7 @@ onMounted(() => {
   }
 
   &__action-row {
+    margin-top: 18rpx;
     display: flex;
     flex-wrap: wrap;
     gap: 18rpx;
@@ -828,6 +926,122 @@ onMounted(() => {
   &__tool-chip.is-yellow {
     background: #fff3da;
     color: #d39a42;
+  }
+
+  &__danger-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18rpx 28rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 243, 240, 0.92);
+    color: #d77469;
+    font-size: 26rpx;
+    font-weight: 700;
+  }
+
+  &__drawer-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(104, 77, 56, 0.18);
+  }
+
+  &__drawer {
+    width: 620rpx;
+    max-width: calc(100vw - 88rpx);
+    height: 100%;
+    padding: calc(100rpx + var(--status-bar-height)) 28rpx calc(28rpx + env(safe-area-inset-bottom));
+    background: rgba(255, 252, 248, 0.98);
+    box-shadow: 30rpx 0 80rpx rgba(113, 87, 66, 0.16);
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+  }
+
+  &__drawer-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24rpx;
+  }
+
+  &__drawer-title {
+    display: block;
+    font-size: 36rpx;
+    font-weight: 700;
+    color: #5f4030;
+  }
+
+  &__drawer-subtitle {
+    display: block;
+    margin-top: 8rpx;
+    font-size: 24rpx;
+    line-height: 1.6;
+    color: #9a7861;
+  }
+
+  &__drawer-create {
+    flex-shrink: 0;
+    padding: 16rpx 28rpx;
+    border-radius: 999rpx;
+    background: linear-gradient(180deg, #ffb19f 0%, #ff998d 100%);
+    color: #ffffff;
+    font-size: 26rpx;
+    font-weight: 700;
+    box-shadow: 0 14rpx 30rpx rgba(255, 160, 145, 0.22);
+  }
+
+  &__drawer-scroll {
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__drawer-item {
+    padding: 26rpx 24rpx;
+    border-radius: 28rpx;
+    background: rgba(255, 255, 255, 0.86);
+    border: 2rpx solid rgba(243, 229, 219, 0.96);
+    box-shadow: 0 14rpx 34rpx rgba(220, 197, 179, 0.12);
+
+    & + & {
+      margin-top: 18rpx;
+    }
+
+    &.is-active {
+      background: linear-gradient(180deg, rgba(255, 244, 246, 0.96) 0%, rgba(255, 250, 248, 0.96) 100%);
+      border-color: rgba(246, 205, 214, 0.96);
+      box-shadow: 0 18rpx 36rpx rgba(232, 186, 195, 0.16);
+    }
+  }
+
+  &__drawer-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+  }
+
+  &__drawer-item-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 28rpx;
+    font-weight: 700;
+    color: #614431;
+  }
+
+  &__drawer-item-time {
+    flex-shrink: 0;
+    font-size: 22rpx;
+    color: #b08a70;
+  }
+
+  &__drawer-item-preview {
+    display: block;
+    margin-top: 12rpx;
+    font-size: 24rpx;
+    line-height: 1.6;
+    color: #94745f;
   }
 
   &__composer {
@@ -871,7 +1085,7 @@ onMounted(() => {
     min-height: 78rpx;
     max-height: 220rpx;
     padding: 22rpx 26rpx;
-    border-radius: 999rpx;
+    border-radius: 34rpx;
     background: rgba(255, 249, 245, 0.96);
     border: 2rpx solid rgba(237, 225, 217, 0.96);
     box-sizing: border-box;

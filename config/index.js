@@ -4,8 +4,7 @@ export const appConfig = Object.freeze({
   requestTimeout: 15000,
   useMock: true,
   mockDelay: 260,
-  useSocketChat: true,
-  chatSocketURL: 'ws://127.0.0.1:8000/ws/chat',
-  chatStreamIdleMs: 800,
-  chatSocketDebug: true
+  useStreamChat: true,
+  chatStreamURL: 'http://192.168.3.19:8000/chat/stream',
+  chatStreamDebug: true
 })

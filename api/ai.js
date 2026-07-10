@@ -29,7 +29,7 @@ function buildAssistantResult(mode, text) {
     correct: {
       title: '语法纠错',
       result: `更自然的说法：${defaultText}`,
-      kana: 'しぜん な ぶん に ととのえました。',
+      kana: 'しぜんな ぶん に ととのえました。',
       romaji: 'shizen na bun ni totonoemashita',
       tips: '重点检查助词、时态和礼貌程度是否统一。'
     },
@@ -60,242 +60,351 @@ function buildAssistantResult(mode, text) {
 }
 
 function buildChatSuggestion() {
-  return '可以继续追问细节，或者把这句复述成你自己的表达。'
+  return '可以继续追问细节，或者把这句话复述成你自己的表达。'
 }
 
-function logSocketDebug(stage, payload = {}) {
-  if (!appConfig.chatSocketDebug) return
+function logStreamDebug(stage, payload = {}) {
+  if (!appConfig.chatStreamDebug) return
 
   const timestamp = new Date().toISOString()
-  console.log(`[ai-socket][${timestamp}][${stage}]`, payload)
+  console.log(`[ai-stream][${timestamp}][${stage}]`, payload)
 }
 
 function createAssistantSessionId() {
   return `assistant_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-function getAssistantSessionId() {
-  let sessionId = getStorage(STORAGE_KEYS.ASSISTANT_SESSION_ID, '')
+function getAssistantSessionId(sessionIdOverride = '') {
+  let sessionId = sessionIdOverride || getStorage(STORAGE_KEYS.ASSISTANT_SESSION_ID, '')
   if (!sessionId) {
     sessionId = createAssistantSessionId()
-    setStorage(STORAGE_KEYS.ASSISTANT_SESSION_ID, sessionId)
+    if (!sessionIdOverride) {
+      setStorage(STORAGE_KEYS.ASSISTANT_SESSION_ID, sessionId)
+    }
   }
   return sessionId
 }
 
-function closeSocket(socketTask) {
-  if (!socketTask) return
-  try {
-    socketTask.close({
-      code: 1000
-    })
-  } catch (_) {
-    // 忽略关闭异常
+function createTextDecoder() {
+  if (typeof TextDecoder === 'function') {
+    return new TextDecoder('utf-8')
+  }
+
+  return {
+    decode(data) {
+      const input = ArrayBuffer.isView(data) ? data : new Uint8Array(data)
+      let content = ''
+
+      input.forEach((item) => {
+        content += String.fromCharCode(item)
+      })
+
+      try {
+        return decodeURIComponent(escape(content))
+      } catch (_) {
+        return content
+      }
+    }
   }
 }
 
-function sendSocketChatMessage(message, options = {}) {
-  const sessionId = getAssistantSessionId()
-  const url = `${appConfig.chatSocketURL}?session_id=${encodeURIComponent(sessionId)}`
+function decodeChunkData(data, decoder) {
+  if (typeof data === 'string') {
+    return data
+  }
 
-  return new Promise((resolve, reject) => {
-    let socketTask = null
-    let isSettled = false
-    let isOpened = false
-    let hasReceivedMessage = false
-    let fullResponse = ''
-    let idleTimer = null
-    let connectTimer = null
-    let firstMessageTimer = null
-    let lastError = null
-    let chunkCount = 0
+  if (data instanceof ArrayBuffer) {
+    return decoder.decode(new Uint8Array(data), { stream: true })
+  }
 
-    logSocketDebug('create', {
-      sessionId,
-      url,
-      messageLength: message.length,
-      messagePreview: message.slice(0, 80)
+  if (ArrayBuffer.isView(data)) {
+    return decoder.decode(data, { stream: true })
+  }
+
+  return `${data ?? ''}`
+}
+
+function extractSseFrames(buffer) {
+  const normalizedBuffer = buffer.replace(/\r\n/g, '\n')
+  const frames = normalizedBuffer.split('\n\n')
+  const rest = frames.pop() || ''
+  return {
+    frames: frames.filter(Boolean),
+    rest
+  }
+}
+
+function parseSseFrame(frame) {
+  const lines = frame.split('\n')
+  let eventName = ''
+  const dataLines = []
+
+  lines.forEach((line) => {
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim()
+      return
+    }
+
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trim())
+    }
+  })
+
+  if (!eventName || !dataLines.length) {
+    return null
+  }
+
+  const rawData = dataLines.join('\n')
+  let data = null
+
+  try {
+    data = JSON.parse(rawData)
+  } catch (_) {
+    data = {
+      message: rawData
+    }
+  }
+
+  return {
+    event: eventName,
+    data
+  }
+}
+
+function createStreamState(message, sessionId, options = {}) {
+  return {
+    message,
+    sessionId,
+    scene: options.scene || '',
+    requestId: '',
+    fullResponse: '',
+    buffer: '',
+    chunkCount: 0,
+    hasReceivedRawChunk: false,
+    isSettled: false
+  }
+}
+
+function buildDoneResult(state, payload = {}) {
+  return {
+    requestId: payload.request_id || state.requestId || '',
+    sessionId: payload.session_id || state.sessionId,
+    reply: payload.reply || state.fullResponse.trim(),
+    suggestion: payload.suggestion || buildChatSuggestion()
+  }
+}
+
+function createSseEventHandler(state, options, resolve, reject) {
+  return (parsedFrame) => {
+    if (!parsedFrame || state.isSettled) return
+
+    const { event, data } = parsedFrame
+    logStreamDebug('event', {
+      sessionId: state.sessionId,
+      event,
+      data
     })
 
-    const clearTimers = () => {
-      if (idleTimer) {
-        clearTimeout(idleTimer)
-        idleTimer = null
-      }
-      if (connectTimer) {
-        clearTimeout(connectTimer)
-        connectTimer = null
-      }
-      if (firstMessageTimer) {
-        clearTimeout(firstMessageTimer)
-        firstMessageTimer = null
-      }
+    if (data?.request_id) {
+      state.requestId = data.request_id
     }
 
-    const finish = () => {
-      if (isSettled) return
-      isSettled = true
-      clearTimers()
-      logSocketDebug('finish', {
-        sessionId,
-        chunkCount,
-        fullLength: fullResponse.length,
-        fullPreview: fullResponse.slice(0, 120)
-      })
-      closeSocket(socketTask)
-      resolve({
-        reply: fullResponse.trim(),
-        suggestion: buildChatSuggestion()
-      })
+    if (event === 'chunk') {
+      const text = `${data?.text ?? ''}`
+      if (!text) return
+
+      state.chunkCount += 1
+      state.fullResponse += text
+
+      if (typeof options.onChunk === 'function') {
+        options.onChunk({
+          chunk: text,
+          fullText: state.fullResponse,
+          requestId: state.requestId
+        })
+      }
+      return
     }
 
-    const fail = (error) => {
-      if (isSettled) return
-      isSettled = true
-      clearTimers()
-      logSocketDebug('fail', {
-        sessionId,
-        isOpened,
-        hasReceivedMessage,
-        chunkCount,
-        errorMessage: error?.errMsg || error?.message || `${error}`
-      })
-      closeSocket(socketTask)
+    if (event === 'done') {
+      state.isSettled = true
+      resolve(buildDoneResult(state, data))
+      return
+    }
+
+    if (event === 'error') {
+      state.isSettled = true
+      const error = new Error(data?.message || '聊天服务请求失败')
+      error.code = data?.code || 'STREAM_ERROR'
+      error.requestId = data?.request_id || state.requestId || ''
       reject(error)
     }
+  }
+}
 
-    const resetIdleTimer = () => {
-      if (idleTimer) {
-        clearTimeout(idleTimer)
-      }
-      idleTimer = setTimeout(() => {
-        logSocketDebug('idle-timeout', {
-          sessionId,
-          chunkCount,
-          fullLength: fullResponse.length
-        })
-        finish()
-      }, appConfig.chatStreamIdleMs)
-    }
+function consumeSseBuffer(state, handleEvent) {
+  const { frames, rest } = extractSseFrames(state.buffer)
+  state.buffer = rest
 
-    connectTimer = setTimeout(() => {
-      fail(new Error('连接聊天服务超时'))
-    }, appConfig.requestTimeout)
+  frames.forEach((frame) => {
+    const parsedFrame = parseSseFrame(frame)
+    handleEvent(parsedFrame)
+  })
+}
 
-    socketTask = uni.connectSocket({
-      url,
-      success: () => {
-        logSocketDebug('connect-success-callback', {
-          sessionId
-        })
+function sendMiniProgramStreamChatMessage(message, sessionId, options = {}) {
+  return new Promise((resolve, reject) => {
+    const decoder = createTextDecoder()
+    const state = createStreamState(message, sessionId, options)
+    const handleEvent = createSseEventHandler(state, options, resolve, reject)
+
+    logStreamDebug('request-start', {
+      sessionId,
+      url: appConfig.chatStreamURL,
+      messageLength: message.length,
+      scene: state.scene
+    })
+
+    const requestTask = uni.request({
+      url: appConfig.chatStreamURL,
+      method: 'POST',
+      timeout: appConfig.requestTimeout,
+      enableChunked: true,
+      header: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream'
+      },
+      data: {
+        message,
+        session_id: sessionId,
+        scene: state.scene || undefined
+      },
+      success: (response) => {
+        if (state.isSettled) return
+
+        if (!state.hasReceivedRawChunk && response?.data) {
+          state.buffer += decodeChunkData(response.data, decoder)
+          consumeSseBuffer(state, handleEvent)
+        }
+
+        if (!state.isSettled) {
+          const error = new Error('聊天流结束但未收到 done 事件')
+          error.code = 'STREAM_DONE_MISSING'
+          reject(error)
+        }
       },
       fail: (error) => {
-        lastError = error || new Error('创建聊天连接失败')
-        logSocketDebug('connect-fail-callback', {
+        if (state.isSettled) return
+
+        logStreamDebug('request-fail', {
           sessionId,
-          errorMessage: lastError?.errMsg || lastError?.message || `${lastError}`
+          errorMessage: error?.errMsg || error?.message || `${error}`
         })
-      },
-      complete: () => {
-        logSocketDebug('connect-complete-callback', {
-          sessionId
-        })
+        reject(error || new Error('聊天服务请求失败'))
       }
     })
 
-    logSocketDebug('connect-called', {
-      sessionId,
-      hasSocketTask: Boolean(socketTask)
-    })
+    if (!requestTask || typeof requestTask.onChunkReceived !== 'function') {
+      reject(new Error('当前环境不支持流式 HTTP 响应'))
+      return
+    }
 
-    socketTask.onOpen(() => {
-      if (isSettled) return
-      isOpened = true
-      logSocketDebug('open', {
-        sessionId
-      })
-      if (connectTimer) {
-        clearTimeout(connectTimer)
-        connectTimer = null
-      }
+    requestTask.onChunkReceived((response) => {
+      if (state.isSettled) return
 
-      socketTask.send({
-        data: message,
-        success: () => {
-          logSocketDebug('send-success', {
-            sessionId,
-            messageLength: message.length
-          })
-        },
-        fail: (error) => {
-          fail(error || new Error('发送聊天消息失败'))
-        }
-      })
-
-      firstMessageTimer = setTimeout(() => {
-        if (hasReceivedMessage || isSettled) return
-        logSocketDebug('first-message-timeout', {
-          sessionId
-        })
-        fail(lastError || new Error('聊天服务长时间没有返回内容'))
-      }, appConfig.requestTimeout)
-    })
-
-    socketTask.onMessage((event) => {
-      if (isSettled) return
-      hasReceivedMessage = true
-      const chunk = typeof event.data === 'string' ? event.data : `${event.data ?? ''}`
-      chunkCount += 1
-      logSocketDebug('message', {
+      state.hasReceivedRawChunk = true
+      const rawChunk = decodeChunkData(response.data, decoder)
+      state.buffer += rawChunk
+      logStreamDebug('raw-chunk', {
         sessionId,
-        chunkCount,
-        chunkLength: chunk.length,
-        chunkPreview: chunk.slice(0, 80),
-        fullLength: fullResponse.length + chunk.length
+        chunkLength: rawChunk.length,
+        bufferedLength: state.buffer.length
       })
-      if (chunk) {
-        fullResponse += chunk
-        if (typeof options.onChunk === 'function') {
-          options.onChunk({
-            chunk,
-            fullText: fullResponse
-          })
-        }
-      }
-      resetIdleTimer()
-    })
-
-    socketTask.onError((error) => {
-      lastError = error || new Error('聊天服务连接失败')
-      logSocketDebug('error', {
-        sessionId,
-        isOpened,
-        hasReceivedMessage,
-        chunkCount,
-        errorMessage: lastError?.errMsg || lastError?.message || `${lastError}`
-      })
-      if (!isOpened) {
-        fail(lastError)
-      }
-    })
-
-    socketTask.onClose((event) => {
-      logSocketDebug('close', {
-        sessionId,
-        isOpened,
-        hasReceivedMessage,
-        chunkCount,
-        code: event?.code,
-        reason: event?.reason
-      })
-      if (isSettled) return
-      if (fullResponse || hasReceivedMessage || isOpened) {
-        finish()
-        return
-      }
-      fail(lastError || new Error('聊天连接已关闭'))
+      consumeSseBuffer(state, handleEvent)
     })
   })
+}
+
+async function sendFetchStreamChatMessage(message, sessionId, options = {}) {
+  if (typeof fetch !== 'function') {
+    throw new Error('当前环境不支持流式 HTTP 请求')
+  }
+
+  const state = createStreamState(message, sessionId, options)
+  const decoder = createTextDecoder()
+
+  logStreamDebug('request-start', {
+    sessionId,
+    url: appConfig.chatStreamURL,
+    messageLength: message.length,
+    scene: state.scene
+  })
+
+  const response = await fetch(appConfig.chatStreamURL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream'
+    },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      scene: state.scene || undefined
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`聊天服务请求失败：${response.status}`)
+  }
+
+  if (!response.body?.getReader) {
+    throw new Error('当前环境不支持流式响应读取')
+  }
+
+  const handleEvent = createSseEventHandler(
+    state,
+    options,
+    () => {},
+    (error) => {
+      throw error
+    }
+  )
+
+  const reader = response.body.getReader()
+
+  while (!state.isSettled) {
+    const { done, value } = await reader.read()
+    if (done) {
+      state.buffer += decoder.decode()
+      consumeSseBuffer(state, handleEvent)
+      break
+    }
+
+    const rawChunk = decoder.decode(value, { stream: true })
+    state.buffer += rawChunk
+    logStreamDebug('raw-chunk', {
+      sessionId,
+      chunkLength: rawChunk.length,
+      bufferedLength: state.buffer.length
+    })
+    consumeSseBuffer(state, handleEvent)
+  }
+
+  if (!state.isSettled) {
+    throw new Error('聊天流结束但未收到 done 事件')
+  }
+
+  return buildDoneResult(state)
+}
+
+function sendHttpStreamChatMessage(message, options = {}) {
+  const sessionId = getAssistantSessionId(options.sessionId)
+
+  // #ifdef MP-WEIXIN
+  return sendMiniProgramStreamChatMessage(message, sessionId, options)
+  // #endif
+
+  return sendFetchStreamChatMessage(message, sessionId, options)
 }
 
 export function resetAiChatSession() {
@@ -311,8 +420,12 @@ export function runAiAssistant(payload) {
 }
 
 export function sendAiChatMessage(payload, options = {}) {
-  if (appConfig.useSocketChat) {
-    return sendSocketChatMessage(payload?.message || '', options)
+  if (appConfig.useStreamChat) {
+    return sendHttpStreamChatMessage(payload?.message || '', {
+      sessionId: options.sessionId || payload?.session_id || '',
+      scene: options.scene || payload?.scene || '',
+      onChunk: options.onChunk
+    })
   }
 
   if (appConfig.useMock) {
