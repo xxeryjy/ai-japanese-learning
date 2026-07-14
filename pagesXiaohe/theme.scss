@@ -1,0 +1,157 @@
+.xiaohe-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(247, 224, 228, 0.72) 0, rgba(247, 224, 228, 0) 26%),
+    radial-gradient(circle at top right, rgba(225, 233, 244, 0.72) 0, rgba(225, 233, 244, 0) 22%),
+    linear-gradient(180deg, #fcfbf8 0%, #fffdf9 54%, #faf7f2 100%);
+  color: #2f3446;
+
+  &__scroll {
+    height: 100vh;
+  }
+
+  &__inner {
+    padding: 0 34rpx calc(52rpx + env(safe-area-inset-bottom));
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+  }
+
+  &__nav-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 18rpx;
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__back {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #3a3c4d;
+    font-size: 48rpx;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 48rpx;
+    line-height: 1.16;
+    font-weight: 700;
+    color: #282b38;
+  }
+
+  &__subtitle {
+    margin-top: 8rpx;
+    font-size: 26rpx;
+    line-height: 1.5;
+    color: #8d909d;
+  }
+
+  &__nav-spacer {
+    flex-shrink: 0;
+  }
+}
+
+.xiaohe-card {
+  border-radius: 40rpx;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 16rpx 36rpx rgba(145, 128, 116, 0.08);
+  border: 2rpx solid rgba(240, 232, 228, 0.9);
+}
+
+.xiaohe-card--warm {
+  background: rgba(248, 244, 238, 0.96);
+}
+
+.xiaohe-card--blush {
+  background: rgba(251, 244, 245, 0.96);
+}
+
+.xiaohe-card--mist {
+  background: rgba(244, 245, 243, 0.96);
+}
+
+.xiaohe-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #7c8798;
+  background: #f2f3f6;
+
+  &--pink {
+    color: #b87c8b;
+    background: #f8f1f3;
+  }
+
+  &--warm {
+    color: #bb8d5d;
+    background: #f8f4ec;
+  }
+
+  &--deep {
+    color: #b98d63;
+    background: #f4eeea;
+  }
+}
+
+.xiaohe-primary-button {
+  height: 112rpx;
+  border-radius: 38rpx;
+  background: #343a4d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fffdfc;
+  font-size: 34rpx;
+  font-weight: 700;
+  box-shadow: 0 16rpx 28rpx rgba(52, 58, 77, 0.18);
+}
+
+.xiaohe-secondary-button {
+  height: 96rpx;
+  border-radius: 34rpx;
+  background: rgba(255, 255, 253, 0.92);
+  border: 2rpx solid #efe7e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b7d83;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.xiaohe-section-label {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #c18594;
+}
+
+.xiaohe-section-label--warm {
+  color: #b98d63;
+}
+
+.xiaohe-section-label--mist {
+  color: #7c8798;
+}
+
+.xiaohe-text-main {
+  color: #313547;
+}
+
+.xiaohe-text-sub {
+  color: #8c8e98;
+}
