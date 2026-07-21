@@ -240,7 +240,8 @@ function formatConversationTime(timestamp) {
   const day = `${date.getDate()}`.padStart(2, '0')
   return `${month}/${day}`
 }
-
+import { useUserStore } from '@/stores/user'
+const userStore = useUserStore()
 async function submit() {
   if (!ensureLogin()) return
   if (isStreaming.value) return
@@ -253,12 +254,12 @@ async function submit() {
     })
     return
   }
-
   try {
     if (isChatMode.value) {
       inputText.value = ''
       await assistantStore.sendChat(content, {
-        scene: currentScene.value
+        scene: currentScene.value,
+        userId: userStore.profile?.id || ''
       })
       return
     }

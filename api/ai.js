@@ -67,7 +67,7 @@ function logStreamDebug(stage, payload = {}) {
   if (!appConfig.chatStreamDebug) return
 
   const timestamp = new Date().toISOString()
-  console.log(`[ai-stream][${timestamp}][${stage}]`, payload)
+  // console.log(`[ai-stream][${timestamp}][${stage}]`, payload)
 }
 
 function createAssistantSessionId() {
@@ -181,7 +181,8 @@ function createStreamState(message, sessionId, options = {}) {
     buffer: '',
     chunkCount: 0,
     hasReceivedRawChunk: false,
-    isSettled: false
+    isSettled: false,
+    userId: options.userId || ''
   }
 }
 
@@ -257,12 +258,12 @@ function sendMiniProgramStreamChatMessage(message, sessionId, options = {}) {
     const decoder = createTextDecoder()
     const state = createStreamState(message, sessionId, options)
     const handleEvent = createSseEventHandler(state, options, resolve, reject)
-
     logStreamDebug('request-start', {
       sessionId,
       url: appConfig.chatStreamURL,
       messageLength: message.length,
-      scene: state.scene
+      scene: state.scene,
+      userId: state.userId
     })
 
     const requestTask = uni.request({
@@ -277,7 +278,8 @@ function sendMiniProgramStreamChatMessage(message, sessionId, options = {}) {
       data: {
         message,
         session_id: sessionId,
-        scene: state.scene || undefined
+        scene: state.scene || undefined,
+        user_id: state.userId || ''
       },
       success: (response) => {
         if (state.isSettled) return
@@ -337,7 +339,8 @@ async function sendFetchStreamChatMessage(message, sessionId, options = {}) {
     sessionId,
     url: appConfig.chatStreamURL,
     messageLength: message.length,
-    scene: state.scene
+    scene: state.scene,
+    userId: options.userId || ''
   })
 
   const response = await fetch(appConfig.chatStreamURL, {
@@ -349,7 +352,8 @@ async function sendFetchStreamChatMessage(message, sessionId, options = {}) {
     body: JSON.stringify({
       message,
       session_id: sessionId,
-      scene: state.scene || undefined
+      scene: state.scene || undefined,
+      user_id: options.userId || ''
     })
   })
 
@@ -424,6 +428,7 @@ export function sendAiChatMessage(payload, options = {}) {
     return sendHttpStreamChatMessage(payload?.message || '', {
       sessionId: options.sessionId || payload?.session_id || '',
       scene: options.scene || payload?.scene || '',
+      userId: options.user_id || payload?.user_id || '',
       onChunk: options.onChunk
     })
   }

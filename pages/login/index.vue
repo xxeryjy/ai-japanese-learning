@@ -1,11 +1,36 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { loginByWechat } from '@/api/auth'
+import { computed, onMounted, ref } from 'vue'
+import { loginByEmail } from '@/api/auth'
 import { useUserStore } from '@/stores/user'
 import bgImage from '@/static/images/bg.png'
 
+const texts = {
+  title: 'AI日语学习',
+  subtitle: '用 AI 让日语学习更轻松',
+  panelTitle: '邮箱登录',
+  panelSubtitle: '欢迎使用 AI日语学习平台',
+  emailLabel: '邮箱',
+  emailPlaceholder: '请输入邮箱',
+  passwordLabel: '密码',
+  passwordPlaceholder: '请输入密码',
+  emailLogin: '登录',
+  wechatLogin: '微信授权登录',
+  registerHint: '还没有账号？',
+  goRegister: '去注册',
+  agreementPrefix: '登录即代表同意',
+  userPolicy: '《用户协议》',
+  andText: ' 和 ',
+  privacyPolicy: '《隐私政策》'
+}
+
 const userStore = useUserStore()
 const isReady = ref(false)
+const form = ref({
+  email: '',
+  password: ''
+})
+
+const canSubmit = computed(() => Boolean(form.value.email.trim() && form.value.password.trim()))
 
 onMounted(() => {
   setTimeout(() => {
@@ -13,105 +38,68 @@ onMounted(() => {
   }, 80)
 })
 
-async function getWechatCode() {
-  // #ifdef MP-WEIXIN
-  return new Promise((resolve, reject) => {
-    uni.login({
-      provider: 'weixin',
-      success: (res) => resolve(res.code),
-      fail: reject
-    })
-  })
-  // #endif
-
-  return Promise.resolve('mock-wechat-code')
-}
-
-async function getWechatProfile() {
-  // #ifdef MP-WEIXIN
-  return new Promise((resolve) => {
-    uni.getUserProfile({
-      desc: '用于完善日语学习资料',
-      success: (res) => resolve(res.userInfo),
-      fail: () => resolve({
-        nickName: 'Sora同学',
-        avatarUrl: 'https://dummyimage.com/120x120/f7d8c9/ffffff&text=AI'
-      })
-    })
-  })
-  // #endif
-
-  return Promise.resolve({
-    nickName: 'Sora同学',
-    avatarUrl: 'https://dummyimage.com/120x120/f7d8c9/ffffff&text=AI'
-  })
-}
-
 function goHome() {
   uni.reLaunch({
     url: '/pages/index/index'
   })
 }
 
-async function handleWechatLogin() {
+function goRegister() {
+  uni.navigateTo({
+    url: '/pages/register/index'
+  })
+}
+
+async function handleEmailLogin() {
+  if (!form.value.email.trim()) {
+    uni.showToast({
+      title: '\u8bf7\u8f93\u5165\u90ae\u7bb1',
+      icon: 'none'
+    })
+    return
+  }
+
+  if (!form.value.password.trim()) {
+    uni.showToast({
+      title: '\u8bf7\u8f93\u5165\u5bc6\u7801',
+      icon: 'none'
+    })
+    return
+  }
+
   try {
     uni.showLoading({
-      title: '登录中...'
+      title: '\u767b\u5f55\u4e2d...'
     })
 
-    const [code, profile] = await Promise.all([
-      getWechatCode(),
-      getWechatProfile()
-    ])
-
-    const result = await loginByWechat({
-      code,
-      nickName: profile.nickName,
-      avatarUrl: profile.avatarUrl
+    const result = await loginByEmail({
+      email: form.value.email.trim(),
+      password: form.value.password
     })
 
     userStore.completeLogin(result)
     goHome()
-  } catch (error) {
-    uni.showToast({
-      title: '登录失败，请稍后重试',
-      icon: 'none'
-    })
   } finally {
     uni.hideLoading()
   }
 }
 
-function handlePhoneLogin() {
+function handleWechatLogin() {
   uni.showToast({
-    title: '手机号登录正在接入',
+    title: '\u5fae\u4fe1\u6388\u6743\u767b\u5f55\u5f00\u53d1\u4e2d',
     icon: 'none'
   })
-}
-
-function handleGuestMode() {
-  userStore.completeLogin({
-    token: `guest-token-${Date.now()}`,
-    profile: {
-      nickName: '游客同学',
-      avatarUrl: 'https://dummyimage.com/120x120/a9d7ff/ffffff&text=Go',
-      level: 'JLPT N5',
-      bio: '先体验，再决定要不要正式开始学习。'
-    }
-  })
-
-  goHome()
 }
 
 function openPolicy(type) {
   const policyMap = {
     user: {
-      title: '用户协议',
-      content: '这里可以接入你的用户协议详情页。当前页面先保留入口与交互。'
+      title: '\u7528\u6237\u534f\u8bae',
+      content: '\u8fd9\u91cc\u53ef\u4ee5\u63a5\u5165\u4f60\u7684\u7528\u6237\u534f\u8bae\u8be6\u60c5\u9875\uff0c\u5f53\u524d\u5148\u4fdd\u7559\u767b\u5f55\u9875\u5165\u53e3\u3002'
     },
     privacy: {
-      title: '隐私政策',
-      content: '这里可以接入你的隐私政策详情页。当前页面先保留入口与交互。'
+      title: '\u9690\u79c1\u653f\u7b56',
+      content: '\u8fd9\u91cc\u53ef\u4ee5\u63a5\u5165\u4f60\u7684\u9690\u79c1\u653f\u7b56\u8be6\u60c5\u9875\uff0c\u5f53\u524d\u5148\u4fdd\u7559\u767b\u5f55\u9875\u5165\u53e3\u3002'
     }
   }
 
@@ -120,7 +108,7 @@ function openPolicy(type) {
   uni.showModal({
     title: current.title,
     content: current.content,
-    confirmText: '知道了',
+    confirmText: '\u77e5\u9053\u4e86',
     showCancel: false
   })
 }
@@ -144,18 +132,56 @@ function openPolicy(type) {
     <view class="login-page__sakura login-page__sakura--4"></view>
     <view class="login-page__sakura login-page__sakura--5"></view>
 
-    <view class="login-page__content">
+    <view class="login-page__content">      
       <view class="login-page__hero">
-        <text class="login-page__title">AI日语学习</text>
+        <text class="login-page__title">{{ texts.title }}</text>
 
         <view class="login-page__subtitle-wrap">
           <view class="login-page__subtitle-line"></view>
-          <text class="login-page__subtitle">用 AI 让日语学习更轻松</text>
+          <text class="login-page__subtitle">{{ texts.subtitle }}</text>
           <view class="login-page__subtitle-line"></view>
         </view>
       </view>
 
-      <view class="login-page__actions">
+      <view class="login-page__panel">
+        <view class="login-page__panel-title">{{ texts.panelTitle }}</view>
+        <view class="login-page__panel-subtitle">{{ texts.panelSubtitle }}</view>
+
+        <view class="login-page__field">
+          <text class="login-page__label">{{ texts.emailLabel }}</text>
+          <input
+            v-model="form.email"
+            class="login-page__input"
+            type="text"
+            maxlength="80"
+            :placeholder="texts.emailPlaceholder"
+            placeholder-class="login-page__input-placeholder"
+          />
+        </view>
+
+        <view class="login-page__field">
+          <text class="login-page__label">{{ texts.passwordLabel }}</text>
+          <input
+            v-model="form.password"
+            class="login-page__input"
+            password
+            maxlength="64"
+            :placeholder="texts.passwordPlaceholder"
+            placeholder-class="login-page__input-placeholder"
+          />
+        </view>
+
+        <view
+          class="login-page__action login-page__action--email"
+          :class="{ 'login-page__action--disabled': !canSubmit }"
+          hover-class="login-page__action--hover"
+          hover-stay-time="90"
+          @tap="handleEmailLogin"
+        >
+          <up-icon name="email" color="#ffffff" size="20"></up-icon>
+          <text class="login-page__action-text login-page__action-text--light">{{ texts.emailLogin }}</text>
+        </view>
+
         <view
           class="login-page__action login-page__action--wechat"
           hover-class="login-page__action--hover"
@@ -164,29 +190,22 @@ function openPolicy(type) {
         >
           <view class="login-page__action-glow"></view>
           <up-icon name="weixin-fill" color="#ffffff" size="22"></up-icon>
-          <text class="login-page__action-text login-page__action-text--light">微信一键登录</text>
+          <text class="login-page__action-text login-page__action-text--light">{{ texts.wechatLogin }}</text>
         </view>
 
-        <view
-          class="login-page__action login-page__action--phone"
-          hover-class="login-page__action--hover"
-          hover-stay-time="90"
-          @tap="handlePhoneLogin"
-        >
-          <up-icon name="phone-fill" color="#5f9fe8" size="20"></up-icon>
-          <text class="login-page__action-text">手机号登录</text>
+        <view class="login-page__helper">
+          <text class="login-page__helper-text">{{ texts.registerHint }}</text>
+          <text class="login-page__helper-link" @tap="goRegister">{{ texts.goRegister }}</text>
         </view>
-
-        <text class="login-page__guest" @tap="handleGuestMode">游客体验</text>
       </view>
 
       <view class="login-page__agreement">
         <up-icon name="checkmark-circle-fill" color="#7fbe7b" size="16"></up-icon>
         <text class="login-page__agreement-text">
-          登录即代表同意
-          <text class="login-page__agreement-link" @tap.stop="openPolicy('user')">《用户协议》</text>
-          <text> </text>
-          <text class="login-page__agreement-link" @tap.stop="openPolicy('privacy')">《隐私政策》</text>
+          {{ texts.agreementPrefix }}
+          <text class="login-page__agreement-link" @tap.stop="openPolicy('user')">{{ texts.userPolicy }}</text>
+          <text>{{ texts.andText }}</text>
+          <text class="login-page__agreement-link" @tap.stop="openPolicy('privacy')">{{ texts.privacyPolicy }}</text>
         </text>
       </view>
     </view>
@@ -201,10 +220,11 @@ $line-brown: rgba(198, 165, 137, 0.7);
 $green-start: rgba(112, 206, 133, 0.96);
 $green-end: rgba(91, 190, 129, 0.92);
 $green-shadow: rgba(92, 187, 120, 0.32);
+$coral-start: rgba(239, 150, 123, 0.96);
+$coral-end: rgba(225, 120, 110, 0.92);
+$coral-shadow: rgba(220, 127, 100, 0.28);
 $glass-white: rgba(255, 255, 255, 0.42);
-$glass-strong: rgba(255, 255, 255, 0.72);
-$blue: #6ea9ea;
-$blue-deep: #5d99df;
+$glass-strong: rgba(255, 255, 255, 0.8);
 $gray-border: rgba(255, 255, 255, 0.55);
 $agreement-green: #8ea591;
 $shadow-soft: 0 16rpx 44rpx rgba(103, 89, 76, 0.12);
@@ -263,14 +283,14 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: calc(env(safe-area-inset-top) + 96rpx) 48rpx calc(env(safe-area-inset-bottom) + 40rpx);
+  padding: calc(env(safe-area-inset-top) + 72rpx) 44rpx calc(env(safe-area-inset-bottom) + 40rpx);
 }
 
 .login-page__hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 150rpx;
+  padding-top: 86rpx;
   animation: fade-up 0.9s ease both;
 }
 
@@ -314,33 +334,80 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
   white-space: nowrap;
 }
 
-.login-page__actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: auto;
-  padding-bottom: 18rpx;
+.login-page__panel {
+  margin-top: 40rpx;
+  padding: 34rpx 30rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.55);
+  border-radius: 34rpx;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.66) 0%, rgba(255, 255, 255, 0.4) 100%);
+  backdrop-filter: blur(18rpx);
+  box-shadow: $shadow-soft;
   animation: fade-up 0.95s ease 0.14s both;
 }
 
+
+.login-page__panel-title {
+  color: $title-brown;
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.login-page__panel-subtitle {
+  margin-top: 10rpx;
+  color: $text-brown;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.login-page__field {
+  margin-top: 24rpx;
+}
+
+.login-page__label {
+  display: block;
+  margin-bottom: 12rpx;
+  color: $text-brown;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+
+.login-page__input {
+  height: 92rpx;
+  padding: 0 28rpx;
+  border: 1.5rpx solid rgba(255, 255, 255, 0.62);
+  border-radius: 999rpx;
+  background: $glass-strong;
+  color: $text-brown;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+
+.login-page__input-placeholder {
+  color: rgba(107, 84, 70, 0.45);
+}
+
+
 .login-page__action {
   position: relative;
-  width: 78%;
-  min-width: 520rpx;
-  max-width: 620rpx;
+  width: 100%;
   height: 92rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 14rpx;
+  margin-top: 22rpx;
   border-radius: 999rpx;
   overflow: hidden;
   backdrop-filter: blur(16rpx);
   box-shadow: $shadow-button;
   transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
 
-  & + & {
-    margin-top: 22rpx;
+  &--email {
+    color: #ffffff;
+    border: 1rpx solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(135deg, $coral-start 0%, rgba(236, 138, 120, 0.94) 48%, $coral-end 100%);
+    box-shadow: 0 20rpx 42rpx $coral-shadow;
   }
 
   &--wechat {
@@ -352,18 +419,16 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
       0 0 38rpx rgba(136, 228, 156, 0.2);
   }
 
-  &--phone {
-    color: $text-brown;
-    border: 1.5rpx solid $gray-border;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.56) 0%, rgba(255, 255, 255, 0.38) 100%);
-    box-shadow: $shadow-soft;
-  }
-
   &--hover {
     transform: scale(0.985);
     opacity: 0.98;
   }
+
+  &--disabled {
+    opacity: 0.72;
+  }
 }
+
 
 .login-page__action-glow {
   position: absolute;
@@ -386,13 +451,26 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
   }
 }
 
-.login-page__guest {
-  margin-top: 30rpx;
-  color: $blue;
-  font-size: 26rpx;
-  line-height: 1.4;
-  letter-spacing: 2rpx;
-  text-shadow: 0 6rpx 14rpx rgba(255, 255, 255, 0.28);
+
+
+
+.login-page__helper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  margin-top: 24rpx;
+}
+
+.login-page__helper-text {
+  color: rgba(107, 84, 70, 0.78);
+  font-size: 24rpx;
+}
+
+.login-page__helper-link {
+  color: #d36d5f;
+  font-size: 24rpx;
+  font-weight: 600;
 }
 
 .login-page__agreement {
@@ -413,7 +491,7 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
 }
 
 .login-page__agreement-link {
-  color: $blue-deep;
+  color: #5d99df;
 }
 
 .login-page__sakura {
@@ -443,6 +521,7 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
     transform: rotate(-72deg);
   }
 
+  
   &--1 {
     left: 12%;
     animation: sakura-fall 13s linear infinite;
@@ -479,7 +558,7 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
 
 .is-ready {
   .login-page__hero,
-  .login-page__actions,
+  .login-page__panel,
   .login-page__agreement {
     will-change: transform, opacity;
   }
@@ -515,9 +594,13 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
 
 @media screen and (max-width: 375px) {
   .login-page__content {
-    padding-left: 38rpx;
-    padding-right: 38rpx;
-    padding-top: calc(env(safe-area-inset-top) + 84rpx);
+    padding-left: 36rpx;
+    padding-right: 36rpx;
+    padding-top: calc(env(safe-area-inset-top) + 60rpx);
+  }
+
+  .login-page__hero {
+    padding-top: 56rpx;
   }
 
   .login-page__title {
@@ -527,11 +610,6 @@ $shadow-button: 0 18rpx 40rpx rgba(95, 93, 103, 0.14);
   .login-page__subtitle {
     font-size: 24rpx;
     letter-spacing: 3rpx;
-  }
-
-  .login-page__action {
-    width: 84%;
-    min-width: 0;
   }
 }
 </style>

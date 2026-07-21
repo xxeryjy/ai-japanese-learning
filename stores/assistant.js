@@ -203,13 +203,15 @@ export const useAssistantStore = defineStore('assistant', {
       this.isStreaming = true
       activeConversation.history.push({
         role: 'user',
-        content: message
+        content: message,
+        user_id: metadata.userId || ''
       })
 
       const assistantMessage = {
         role: 'assistant',
         content: '',
-        suggestion: ''
+        suggestion: '',
+        user_id: metadata.userId || ''
       }
       activeConversation.history.push(assistantMessage)
       const reactiveAssistantMessage = activeConversation.history[activeConversation.history.length - 1]
@@ -220,11 +222,13 @@ export const useAssistantStore = defineStore('assistant', {
         const result = await sendAiChatMessage(
           {
             message,
-            scene: metadata.scene || ''
+            scene: metadata.scene || '',
+            user_id: metadata.userId || ''
           },
           {
             sessionId: activeConversation.sessionId,
             scene: metadata.scene || '',
+            user_id: metadata.userId || '',
             onChunk: ({ fullText }) => {
               reactiveAssistantMessage.content = fullText
               this.updateConversationSummary(activeConversation.id)

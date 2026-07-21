@@ -8,7 +8,7 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isLoggedIn: (state) => Boolean(state.token),
-    displayName: (state) => state.profile?.nickName || '未登录用户'
+    displayName: (state) => state.profile?.nickName || 'Guest User'
   },
   actions: {
     hydrate() {
@@ -36,4 +36,3 @@ export const useUserStore = defineStore('user', {
     }
   }
 })
-
